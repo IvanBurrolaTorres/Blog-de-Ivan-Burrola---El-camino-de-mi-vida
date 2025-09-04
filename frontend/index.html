@@ -1,0 +1,314 @@
+<!-- FILE: frontend/index.html -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Blog de Ivan Burrola - Estrategias de restablecimiento de hábitos académicos"/>
+  <meta property="og:title" content="Blog de Ivan Burrola - Mi camino para graduarme como ITC"/>
+  <title>Blog de Ivan Burrola - Mi camino para graduarme como ITC</title>
+  <script>
+    // Forzar la URL base de la API al backend local
+    window.BLOG_API_BASE_URL = "http://localhost:3001/api";
+  </script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-router-dom@5.3.4/umd/react-router-dom.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root { --primary:#7BD389; --secondary:#66A6FF; --bg-dark:#0C1222; --bg-card:#1B2551; }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg-dark);color:#E6EEF8;min-height:100vh}
+    .gradient-text{background:linear-gradient(135deg,var(--primary),var(--secondary));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .card{background:rgba(27,37,81,.6);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.1)}
+    .btn-primary{background:linear-gradient(135deg,var(--primary),var(--secondary));color:var(--bg-dark);font-weight:bold;padding:.5rem 1.5rem;border-radius:.75rem;transition:opacity .2s}
+    .btn-primary:hover{opacity:.9}
+    .skeleton{background:linear-gradient(90deg,rgba(255,255,255,.05) 0%,rgba(255,255,255,.1) 50%,rgba(255,255,255,.05) 100%);background-size:200% 100%;animation:shimmer 1.5s infinite}
+    @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+    .fade-in{animation:fadeIn .3s ease-in}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script>
+  // === Simple, deployment-proof config ===
+  // If you host an API, set window.BLOG_API_BASE_URL="https://tu-api.com/api";
+  window.BLOG_API_BASE_URL = window.BLOG_API_BASE_URL || ''; // empty => mock mode
+
+  const { useState, useEffect, useMemo, useCallback, memo, Fragment } = React;
+  const { HashRouter, Switch, Route, Link, withRouter } = ReactRouterDOM;
+  const DOMPurify = window.DOMPurify;
+
+  const CONFIG = {
+    seo: {
+      title: "Blog de Ivan Burrola - Mi camino para graduarme como ITC",
+      student: { name: "Iván Burrola", matricula: "A01562825" },
+      course: "Estrategias de restablecimiento de hábitos académicos (Gpo 601)",
+      professor: "Gabriela Aguilar"
+    }
+  };
+
+  // Mock data for standalone file delivery
+  const MOCK_POSTS = [
+    {
+      id: "p1",
+      slug: "infografico-tiempo",
+      title: "Aportación 1: Infográfico de administración del tiempo",
+      excerpt: "Impacto académico y profesional de gestionar el tiempo. Sistema 90/15, Matriz de Eisenhower.",
+      content: "<h2>Propósito</h2><p>Crear un blog en formato digital y publicar la primera aportación.</p>",
+      tags: ["Hábitos", "Productividad", "Semana 1"],
+      views: 42,
+      date: "2025-08-18",
+      comments: []
+    },
+    {
+      id: "p2",
+      slug: "habitos-exitosos",
+      title: "Aportación 2: 10 hábitos recomendados por gente exitosa",
+      excerpt: "Análisis de los hábitos que personas exitosas comparten.",
+      content: "<h2>Propósito</h2><p>Investigar y compartir hábitos saludables.</p>",
+      tags: ["Éxito", "Hábitos", "Desarrollo personal", "Semana 2"],
+      views: 18,
+      date: "2025-08-25",
+      comments: []
+    }
+  ];
+
+  // Api layer with cache + fallback to mock
+  class CacheLayer {
+    constructor(maxSize=50){ this.cache=new Map(); this.maxSize=maxSize; this.ttl=300000; }
+    get(k){ const v=this.cache.get(k); if(v && Date.now()-v.t < this.ttl){ this.cache.delete(k); this.cache.set(k, v); return v.d; } }
+    set(k,d){ if(this.cache.size>=this.maxSize){ const fk=this.cache.keys().next().value; this.cache.delete(fk); } this.cache.set(k,{d,t:Date.now()}); }
+  }
+  const cache = new CacheLayer();
+
+  const api = {
+    base: window.BLOG_API_BASE_URL,
+    async fetchJSON(path, opts={}){
+      const key = path + JSON.stringify(opts||{});
+      const c = cache.get(key); if(c) return c;
+      if(!this.base){
+        // Mock mode
+        await new Promise(r=>setTimeout(r,200));
+        if(path === '/posts') return { posts: MOCK_POSTS, pagination: { page:1, limit:MOCK_POSTS.length, total:MOCK_POSTS.length, pages:1 } };
+        if(path.startsWith('/posts/')){
+          const slug = path.split('/')[2];
+          const p = MOCK_POSTS.find(p=>p.slug===slug);
+          if(!p) throw new Error('Not found');
+          return p;
+        }
+        if(path.startsWith('/posts/') && path.endsWith('/comments') && opts.method==='POST'){
+          return { success: true, id: Date.now().toString() };
+        }
+        if(path.startsWith('/search')) return { posts: [], pagination: { page:1, limit:10, total:0, pages:0 } };
+        throw new Error('Endpoint not found (mock)');
+      }
+      const controller = new AbortController();
+      const id = setTimeout(()=>controller.abort(), 5000);
+      try{
+        const res = await fetch(this.base + path, { ...opts, headers: { 'Content-Type':'application/json', ...(opts.headers||{}) }, signal: controller.signal });
+        if(!res.ok) throw new Error('HTTP '+res.status);
+        const data = await res.json();
+        cache.set(key, data);
+        return data;
+      } finally { clearTimeout(id); }
+    },
+    getPosts(){ return this.fetchJSON('/posts'); },
+    getPost(slug){ return this.fetchJSON(`/posts/${encodeURIComponent(slug)}`); },
+    submitComment(postId, data){ return this.fetchJSON(`/posts/${encodeURIComponent(postId)}/comments`, { method:'POST', body: JSON.stringify(data) }); }
+  };
+
+  // Theme
+  function useTheme(){
+    const [theme,setTheme]=useState(()=>localStorage.getItem('theme')||'dark');
+    useEffect(()=>{ document.documentElement.className=theme; localStorage.setItem('theme',theme); },[theme]);
+    const toggle=useCallback(()=> setTheme(t=>t==='dark'?'light':'dark'),[]);
+    return [theme,toggle];
+  }
+
+  const Header = memo(({ onThemeToggle }) => {
+    return React.createElement('header',{className:'sticky top-0 z-50 backdrop-blur-lg bg-opacity-90', style:{background:'rgba(12,18,34,.9)'}},
+      React.createElement('div',{className:'max-w-6xl mx-auto px-6 py-4'},
+        React.createElement('div',{className:'flex items-center justify-between'},
+          React.createElement('div',{className:'flex items-center gap-3'},
+            React.createElement('div',{className:'w-10 h-10 rounded-xl grid place-content-center text-white font-black', style:{background:'linear-gradient(135deg,var(--primary),var(--secondary))'}},'🎓'),
+            React.createElement('h1',{className:'gradient-text text-xl font-bold'},CONFIG.seo.title)
+          ),
+          React.createElement('nav',{className:'flex items-center gap-4'},
+            React.createElement(Link,{to:'/', className:'hover:text-white transition-colors'},'Inicio'),
+            React.createElement('button',{onClick:onThemeToggle,className:'p-2 rounded-lg hover:bg-white hover:bg-opacity-10 transition-colors','aria-label':'Cambiar tema'},'🌓')
+          )
+        ),
+        React.createElement('div',{className:'text-xs opacity-70 mt-2'},
+          `${CONFIG.seo.course} • Prof. ${CONFIG.seo.professor} • ${CONFIG.seo.student.name} (${CONFIG.seo.student.matricula})`
+        )
+      )
+    );
+  });
+
+  const PostCard = memo(({ post }) =>
+    React.createElement(Link,{to:`/post/${post.slug}`, className:'card rounded-xl p-6 hover:scale-105 transition-transform cursor-pointer fade-in block'},
+      React.createElement('h2',{className:'text-xl font-bold mb-2'},post.title),
+      React.createElement('div',{className:'text-xs opacity-60 mb-3'}, `${(post.date||'').slice(0,10)} • ${(post.tags||[]).join(' • ')} • ${post.views||0} vistas`),
+      React.createElement('p',{className:'opacity-80 mb-4'}, post.excerpt),
+      React.createElement('button',{className:'btn-primary'},'Leer más →')
+    )
+  );
+
+  function PostList(props){
+    const [loading,setLoading]=useState(true);
+    const [posts,setPosts]=useState([]);
+    const [search,setSearch]=useState('');
+    const [error,setError]=useState("");
+    useEffect(()=>{
+      let mounted=true;
+      (async()=>{
+        try{
+          const res = await api.getPosts();
+          if(mounted) setPosts(res.posts||[]);
+        } catch(e) {
+          setError("No se pudo conectar con la API. Asegúrate de que el backend está corriendo en http://localhost:3001/api y que abriste el frontend con un servidor local (no doble clic). Si el problema persiste, revisa la consola del navegador.");
+        } finally { if(mounted) setLoading(false); }
+      })();
+      return ()=>{ mounted=false; };
+    },[]);
+    const filtered = useMemo(()=>{
+      const q = search.trim().toLowerCase();
+      if(!q) return posts;
+      return posts.filter(p =>
+        (p.title||'').toLowerCase().includes(q) ||
+        (p.excerpt||'').toLowerCase().includes(q) ||
+        (p.tags||[]).some(t=>t.toLowerCase().includes(q))
+      );
+    },[posts,search]);
+
+    if(error) return React.createElement('div',{className:'max-w-2xl mx-auto px-6 py-8 text-center text-red-400 bg-red-900 rounded-xl mt-12'},
+      React.createElement('h2', {className:'text-2xl font-bold mb-4'}, 'Error de conexión'),
+      React.createElement('p', null, error)
+    );
+
+    if(loading) return React.createElement('div',{className:'max-w-6xl mx-auto px-6 py-8'},
+      React.createElement('div',{className:'grid gap-6 md:grid-cols-2'},
+        [1,2].map(i=>React.createElement('div',{key:i,className:'card rounded-xl p-6'},
+          React.createElement('div',{className:'skeleton h-6 w-3/4 mb-3 rounded'}),
+          React.createElement('div',{className:'skeleton h-4 w-1/2 mb-3 rounded'}),
+          React.createElement('div',{className:'skeleton h-16 w-full mb-4 rounded'}),
+          React.createElement('div',{className:'skeleton h-10 w-32 rounded'})
+        ))
+      )
+    );
+
+    return React.createElement('div',{className:'max-w-6xl mx-auto px-6 py-8'},
+      React.createElement('div',{className:'mb-8'},
+        React.createElement('input',{type:'text',placeholder:'Buscar posts...',value:search,onChange:e=>setSearch(e.target.value),
+          className:'w-full max-w-md px-4 py-2 rounded-lg bg-white bg-opacity-10 backdrop-blur border border-white border-opacity-20 focus:outline-none focus:ring-2 focus:ring-primary','aria-label':'Buscar posts'})
+      ),
+      React.createElement('div',{className:'grid gap-6 md:grid-cols-2'},
+        filtered.length? filtered.map(p=>React.createElement(PostCard,{key:p.slug,post:p}))
+        : React.createElement('p',{className:'col-span-2 text-center opacity-60'},'No se encontraron posts.')
+      )
+    );
+  }
+
+  function PostDetail(props){
+    const slug = props.match.params.slug;
+    const [post,setPost]=useState(null);
+    const [loading,setLoading]=useState(true);
+    const [comment,setComment]=useState('');
+    const [name,setName]=useState('');
+    useEffect(()=>{
+      let mounted=true;
+      (async()=>{
+        try{
+          const p = await api.getPost(slug);
+          if(mounted) setPost(p);
+        } catch {
+          if(props.history) props.history.push('/');
+        } finally { if(mounted) setLoading(false); }
+      })();
+      return ()=>{ mounted=false; };
+    },[slug]);
+
+    if(loading) return React.createElement('div',{className:'max-w-4xl mx-auto px-6 py-8'}, React.createElement('div',{className:'skeleton h-8 w-2/3 mb-4 rounded'}), React.createElement('div',{className:'skeleton h-40 w-full rounded'}));
+
+    if(!post) return null;
+
+    const sanitized = DOMPurify.sanitize(post.content||'');
+
+    async function handleSubmit(e){
+      e.preventDefault();
+      if(!comment.trim()||!name.trim()) return;
+      await api.submitComment(post.id,{ author:name, content:comment });
+      setComment(''); setName(''); alert('Comentario enviado');
+    }
+
+    return React.createElement('article',{className:'max-w-4xl mx-auto px-6 py-8 fade-in'},
+      React.createElement(Link,{to:'/',className:'inline-block mb-4 text-primary hover:underline'},'← Volver'),
+      React.createElement('h1',{className:'text-3xl md:text-4xl font-bold gradient-text mb-2'}, post.title),
+      React.createElement('div',{className:'text-sm opacity-60 mb-6'}, `${(post.date||'').slice(0,10)} • ${(post.tags||[]).join(' • ')} • ${post.views||0} vistas`),
+      React.createElement('div',{className:'prose prose-invert max-w-none', dangerouslySetInnerHTML:{__html: sanitized}}),
+      React.createElement('section',{className:'mt-12 border-t border-white border-opacity-10 pt-8'},
+        React.createElement('h3',{className:'text-2xl font-bold mb-6'},'Comentarios'),
+        (post.comments&&post.comments.length)
+          ? React.createElement('div',{className:'space-y-4 mb-8'},
+              post.comments.map(c=>React.createElement('div',{key:c.id,className:'card rounded-lg p-4'},
+                React.createElement('div',{className:'flex justify-between mb-2'},
+                  React.createElement('strong',null,c.author),
+                  React.createElement('span',{className:'text-xs opacity-60'}, (c.createdAt||'').slice(0,10))
+                ),
+                React.createElement('p',{className:'opacity-80'}, c.content)
+              ))
+            )
+          : React.createElement('p',{className:'opacity-60 mb-8'},'No hay comentarios aún.'),
+        React.createElement('form',{onSubmit:handleSubmit,className:'space-y-4'},
+          React.createElement('input',{type:'text',placeholder:'Tu nombre',value:name,onChange:e=>setName(e.target.value),required:true,
+            className:'w-full px-4 py-2 rounded-lg bg-white bg-opacity-10 backdrop-blur border border-white border-opacity-20','aria-label':'Tu nombre'}),
+          React.createElement('textarea',{placeholder:'Escribe tu comentario...',value:comment,onChange:e=>setComment(e.target.value),required:true,rows:3,
+            className:'w-full px-4 py-2 rounded-lg bg-white bg-opacity-10 backdrop-blur border border-white border-opacity-20 resize-none','aria-label':'Escribe tu comentario'}),
+          React.createElement('button',{type:'submit',className:'btn-primary'},'Enviar comentario')
+        )
+      )
+    );
+  }
+
+  const PostDetailWithRouter = withRouter(PostDetail);
+
+  function App(){
+    const [theme,toggleTheme]=useTheme();
+  return React.createElement(HashRouter,null,
+      React.createElement(Fragment,null,
+        React.createElement(Header,{onThemeToggle:toggleTheme}),
+        React.createElement('main',{className:'min-h-screen'},
+          React.createElement(Switch,null,
+            React.createElement(Route,{path:'/post/:slug', component:PostDetailWithRouter}),
+            React.createElement(Route,{exact:true, path:'/', component:PostList}),
+            React.createElement(Route,{render:()=>React.createElement('p',null,'No encontrado')})
+          )
+        ),
+        React.createElement('footer',{className:'border-t border-white border-opacity-10 py-6 mt-12'},
+          React.createElement('div',{className:'max-w-6xl mx-auto px-6 text-center text-sm opacity-60'},
+            `© ${new Date().getFullYear()} ${CONFIG.seo.student.name} • ${CONFIG.seo.course}`
+          )
+        )
+      )
+    );
+  }
+
+  ReactDOM.render(React.createElement(App), document.getElementById('root'));
+  </script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Blog",
+    "name": "Blog de Ivan Burrola",
+    "description": "Mi camino para graduarme como ITC",
+    "author": { "@type": "Person", "name": "Iván Burrola" },
+    "publisher": { "@type": "Organization", "name": "Tecnológico de Monterrey" }
+  }
+  </script>
+</body>
+</html>

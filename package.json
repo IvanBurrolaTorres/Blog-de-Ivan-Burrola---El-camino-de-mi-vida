@@ -1,0 +1,36 @@
+{
+  "name": "blog-academico-backend",
+  "version": "2.1.0",
+  "type": "module",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "prisma:seed": "node prisma/seed.js",
+    "lint": "node -e \"process.exit(0)\""
+  },
+  "dependencies": {
+    "@fastify/caching": "^8.0.0",
+    "@fastify/cors": "^8.5.0",
+    "@fastify/helmet": "^11.1.1",
+    "@fastify/rate-limit": "^9.1.0",
+    "@prisma/client": "^5.8.0",
+    "bcrypt": "^5.1.1",
+    "dotenv": "^16.3.1",
+    "fastify": "^4.25.2",
+    "jsonwebtoken": "^9.0.2",
+    "zod": "^3.22.4",
+    "zod-to-json-schema": "^3.24.6"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "nodemon": "^3.0.2",
+    "prisma": "^5.8.0"
+  }
+}
